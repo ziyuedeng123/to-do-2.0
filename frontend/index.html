@@ -31,7 +31,6 @@
       <table class="task-table">
         <thead>
           <tr>
-            <!-- ✅ V5.2：编号列改为可点击排序按钮 -->
             <th class="col-no">
               <button
                 id="sortNoBtn"
@@ -97,6 +96,7 @@
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <!-- ✅ 关键修复：用绝对路径引用，确保 Vercel 能正确解析 -->
+  <script src="/script.js"></script>
 </body>
 </html>

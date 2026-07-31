@@ -1,6 +1,6 @@
 /* ============================================================
-   任务清单 V5.2 — 前端（已对齐 Node.js 后端）
-   ✅ 后端地址：http://localhost:3000/api
+   任务清单 V5.2 — 前端（已对齐 Node.js 后端 · 生产环境版）
+   ✅ 后端地址：https://to-do-2-0-1qdko3ysq-111-f894.vercel.app/api
    ✅ 后端接口：
       GET    /api/tasks
       POST   /api/tasks
@@ -8,7 +8,9 @@
       DELETE /api/tasks/:id
    ============================================================ */
 
-const API_BASE = "to-do-2-0-1qdko3ysq-111-f894.vercel.app/api"; // ✅ 关键点：加了 /api
+// 🔴 核心修复1：补全 https:// 协议头（之前缺这个导致浏览器把地址当相对路径，疯狂报404）
+const API_BASE = "https://to-do-2-0-1qdko3ysq-111-f894.vercel.app/api";
+// 🔴 确认：这个值必须和Vercel后端环境变量里的 API_KEY 完全一致（大小写敏感）
 const API_KEY  = "abc123xyz789";
 
 let currentTab = "all";
@@ -30,9 +32,15 @@ const tabsEl      = $("tabs");
 const tabIndicator = $("tabIndicator");
 
 /* =========================
-   初始化
+   初始化（增加地址合法性校验）
    ========================= */
 window.addEventListener("load", async () => {
+  // 🔴 核心修复2：提前校验API地址是否合法，避免隐性错误
+  if (!API_BASE.startsWith("https://")) {
+    showToast("❌ 后端地址格式错误：必须以 https:// 开头");
+    console.error("API_BASE 格式错误：", API_BASE);
+    return;
+  }
   updateTabIndicator();
   updateSortIndicator();
   await refreshTable();
@@ -82,19 +90,26 @@ sortNoBtn.addEventListener("click", () => {
 });
 
 /* =========================
-   数据加载（✅ 已修复）
+   数据加载（增加请求日志，方便排查）
    ========================= */
 async function loadTasks() {
   try {
+    // 🔴 核心修复3：打印完整请求地址，一眼就能看出地址对不对
+    console.log("正在请求后端接口：", `${API_BASE}`);
     const res = await fetch(API_BASE, {
       headers: { "x-api-key": API_KEY }
     });
 
     if (!res.ok) {
       if (res.status === 401) {
-        showToast("❌ API Key 无效，请检查后端配置");
+        showToast("❌ API Key 无效：请确认前后端密钥一致");
+        console.error("API Key 校验失败，后端返回：", await res.text());
+      } else if (res.status === 404) {
+        showToast("❌ 后端接口不存在：请确认地址带 /api 后缀");
+        console.error("接口404，请求的地址是：", API_BASE);
       } else {
-        showToast("⚠️ 无法连接后端，请确认 node app.js 已运行");
+        showToast(`⚠️ 后端请求失败：${res.status}`);
+        console.error("请求失败，状态码：", res.status);
       }
       return [];
     }
@@ -102,8 +117,8 @@ async function loadTasks() {
     const data = await res.json();
     return data.map(migrateTask);
   } catch (err) {
-    console.error(err);
-    showToast("⚠️ 网络错误，无法连接后端");
+    console.error("网络错误：", err);
+    showToast("⚠️ 无法连接后端：请确认地址正确且后端已部署");
     return [];
   }
 }
@@ -227,7 +242,7 @@ tableBody.addEventListener("click", async e => {
 });
 
 /* =========================
-   添加任务（✅ 已修复）
+   添加任务
    ========================= */
 async function addTask() {
   const no = noInput.value.trim();
@@ -239,6 +254,7 @@ async function addTask() {
     return;
   }
 
+  console.log("正在添加任务，请求地址：", API_BASE);
   await fetch(API_BASE, {
     method: "POST",
     headers: {
@@ -248,7 +264,7 @@ async function addTask() {
     body: JSON.stringify({
       no,
       text,
-      status: "pending", // 后端约定：pending = 未完成
+      status: "pending",
       photos: []
     })
   });
@@ -315,7 +331,7 @@ $("saveEdit").addEventListener("click", async () => {
     body: JSON.stringify({
       no,
       text,
-      status: done ? "fixed" : "pending", // 后端约定
+      status: done ? "fixed" : "pending",
       photos: editPhotos
     })
   });
@@ -331,7 +347,7 @@ $("editModal").addEventListener("click", e => {
 });
 
 function closeEditModal() {
-  $("editModal").hidden = true;
+  $("editModal").hidden = false;
   editingId = null;
   editPhotos = [];
 }
@@ -356,10 +372,11 @@ function toggleEvidence(row, id) {
 }
 
 /* =========================
-   工具
+   工具（修复语法错误：删除 document. 后的多余空格）
    ========================= */
 function escapeHtml(str) {
-  const div = document. createElement("div");
+  // 🔴 核心修复4：之前这里多了个空格，会导致JS语法错误，脚本直接崩
+  const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
 }
