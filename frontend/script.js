@@ -8,7 +8,7 @@
       DELETE /api/tasks/:id
    ============================================================ */
 
-const API_BASE = "http://localhost:3000/api"; // ✅ 关键点：加了 /api
+const API_BASE = "to-do-2-0-1qdko3ysq-111-f894.vercel.app/api"; // ✅ 关键点：加了 /api
 const API_KEY  = "my-secret-key";
 
 let currentTab = "all";
