@@ -2,6 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const tasksRouter = require('./routes/tasks');
 
@@ -14,7 +15,7 @@ if (!process.env.API_KEY) {
     process.exit(1);
 }
 
-// CORS 配置（允许 Vercel 预览域名）
+// CORS 配置
 app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -23,25 +24,26 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 静态文件服务：托管前端页面
+// ── 本地开发：静态文件服务 + SPA fallback ──
+// Vercel 上由 @vercel/static 接管，此处仅本地开发时生效
 const frontendPath = path.join(__dirname, '..', 'frontend');
-app.use(express.static(frontendPath));
+const isLocalDev = fs.existsSync(frontendPath);
 
-// 挂载路由：所有 /api 开头的请求都交给 tasksRouter 处理
-app.use('/api', tasksRouter);
+if (isLocalDev) {
+    app.use(express.static(frontendPath));
 
-// SPA fallback：所有非 API 请求返回 index.html
-app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
-    if (req.method !== 'GET') return next();
-    const indexPath = path.join(frontendPath, 'index.html');
-    res.sendFile(indexPath, (err) => {
-        if (err) {
-            console.error('Failed to send index.html:', err);
-            next(err);
-        }
+    // SPA fallback：非 API 的 GET 请求返回 index.html
+    app.use((req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        if (req.method !== 'GET') return next();
+        res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
+            if (err) next(err);
+        });
     });
-});
+}
+
+// ── API 路由 ──
+app.use('/api', tasksRouter);
 
 // 404 处理（API 路由未匹配时）
 app.use('/api', (req, res) => {
@@ -58,7 +60,9 @@ app.use((err, req, res, _next) => {
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`✅ Server is running on http://localhost:${PORT}`);
-        console.log(`🌐 Frontend:  http://localhost:${PORT}`);
+        if (isLocalDev) {
+            console.log(`🌐 Frontend:  http://localhost:${PORT}`);
+        }
         console.log(`📡 API:       http://localhost:${PORT}/api/tasks`);
         console.log('🔑 API Key is configured.');
     });
