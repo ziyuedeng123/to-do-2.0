@@ -1,22 +1,22 @@
 /* ============================================================
-   任务清单 V5.2 — 前端（已对齐 Node.js 后端 · 生产环境版）
-   ✅ 后端地址：https://to-do-2-0-1qdko3ysq-111-f894.vercel.app/api
-   ✅ 后端接口：
+   任务清单 V5.3 — 前端（已对齐 Node.js 后端 · Vercel 部署版）
+   ✅ 后端路由：
       GET    /api/tasks
       POST   /api/tasks
       PUT    /api/tasks/:id
       DELETE /api/tasks/:id
    ============================================================ */
 
-// 🔴 核心修复1：补全 https:// 协议头（之前缺这个导致浏览器把地址当相对路径，疯狂报404）
-const API_BASE = "https://to-do-2-0-1qdko3ysq-111-f894.vercel.app/api";
-// 🔴 确认：这个值必须和Vercel后端环境变量里的 API_KEY 完全一致（大小写敏感）
-const API_KEY  = "abc123xyz789";
+// 使用相对路径，适配任意域名（本地开发 & Vercel 部署均可）
+const API_BASE = "/api/tasks";
+// 🔴 注意：此处密钥仅用于演示。生产环境应使用用户登录 + JWT 方案
+const API_KEY  = "my-secret-key";
 
 let currentTab = "all";
 let sortOrder = "asc";
 let editingId = null;
 let editPhotos = [];
+let cachedTasks = []; // 缓存已加载的任务，避免重复请求
 
 /* =========================
    DOM 快捷
@@ -32,17 +32,11 @@ const tabsEl      = $("tabs");
 const tabIndicator = $("tabIndicator");
 
 /* =========================
-   初始化（增加地址合法性校验）
+   初始化
    ========================= */
 window.addEventListener("load", async () => {
-  // 🔴 核心修复2：提前校验API地址是否合法，避免隐性错误
-  if (!API_BASE.startsWith("https://")) {
-    showToast("❌ 后端地址格式错误：必须以 https:// 开头");
-    console.error("API_BASE 格式错误：", API_BASE);
-    return;
-  }
   updateTabIndicator();
-  updateSortIndicator();
+  updateSortUI();
   await refreshTable();
 });
 
@@ -65,7 +59,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     );
     currentTab = tab.dataset.tab;
     updateTabIndicator();
-    refreshTable();
+    renderTable(cachedTasks);
   });
 });
 
@@ -76,26 +70,26 @@ function cycleSortOrder() {
   sortOrder = sortOrder === "asc" ? "desc" : "asc";
 }
 
-function updateSortIndicator() {
+function updateSortUI() {
   if (!sortNoBtn) return;
+  // 同步 data-sort 属性（CSS 样式依赖此属性）
+  sortNoBtn.setAttribute("data-sort", sortOrder);
   const icon = sortNoBtn.querySelector(".sort-icon");
-  if (!icon) return;
-  icon.textContent = sortOrder === "asc" ? "↑" : "↓";
+  if (icon) icon.textContent = sortOrder === "asc" ? "↑" : "↓";
 }
 
 sortNoBtn.addEventListener("click", () => {
   cycleSortOrder();
-  updateSortIndicator();
-  refreshTable();
+  updateSortUI();
+  renderTable(cachedTasks);
 });
 
 /* =========================
-   数据加载（增加请求日志，方便排查）
+   数据加载
    ========================= */
 async function loadTasks() {
   try {
-    // 🔴 核心修复3：打印完整请求地址，一眼就能看出地址对不对
-    console.log("正在请求后端接口：", `${API_BASE}`);
+    console.log(`[请求] GET ${API_BASE}`);
     const res = await fetch(API_BASE, {
       headers: { "x-api-key": API_KEY }
     });
@@ -103,10 +97,10 @@ async function loadTasks() {
     if (!res.ok) {
       if (res.status === 401) {
         showToast("❌ API Key 无效：请确认前后端密钥一致");
-        console.error("API Key 校验失败，后端返回：", await res.text());
+        console.error("API Key 校验失败：", await res.text());
       } else if (res.status === 404) {
-        showToast("❌ 后端接口不存在：请确认地址带 /api 后缀");
-        console.error("接口404，请求的地址是：", API_BASE);
+        showToast("❌ 后端接口不存在：请确认地址带 /api/tasks");
+        console.error("接口 404：", API_BASE);
       } else {
         showToast(`⚠️ 后端请求失败：${res.status}`);
         console.error("请求失败，状态码：", res.status);
@@ -118,23 +112,25 @@ async function loadTasks() {
     return data.map(migrateTask);
   } catch (err) {
     console.error("网络错误：", err);
-    showToast("⚠️ 无法连接后端：请确认地址正确且后端已部署");
+    showToast("⚠️ 无法连接后端：请确认后端已启动");
     return [];
   }
 }
 
 /**
- * ✅ 数据格式转换
- * 后端字段 → 前端字段
+ * 数据格式转换：后端字段 → 前端字段
+ * 后端 status: "pending" | "in-progress" | "completed"
  */
 function migrateTask(t) {
   return {
     id: String(t.id),
     no: t.no || "",
     text: t.text || "",
-    done: t.status === "fixed",   // pending → false, fixed → true
+    done: t.status === "completed",
+    status: t.status || "pending",
     photos: Array.isArray(t.photos) ? t.photos : [],
-    finishedAt: t.finishedAt || null
+    createdAt: t.createdAt || null,
+    updatedAt: t.updatedAt || null
   };
 }
 
@@ -142,8 +138,8 @@ function migrateTask(t) {
    表格渲染
    ========================= */
 async function refreshTable() {
-  const tasks = await loadTasks();
-  renderTable(tasks);
+  cachedTasks = await loadTasks();
+  renderTable(cachedTasks);
 }
 
 function renderTable(tasks) {
@@ -153,7 +149,7 @@ function renderTable(tasks) {
   if (currentTab === "todo") list = list.filter(t => !t.done);
   if (currentTab === "done") list = list.filter(t => t.done);
 
-  // 排序
+  // 排序（按编号中的数字部分）
   list.sort((a, b) => {
     const na = parseInt(a.no.replace(/\D/g, "")) || 0;
     const nb = parseInt(b.no.replace(/\D/g, "")) || 0;
@@ -178,10 +174,12 @@ function renderTable(tasks) {
 
     const statusHtml = task.done
       ? `<span class="status done">已完成</span>`
-      : `<span class="status todo">未完成</span>`;
+      : task.status === "in-progress"
+        ? `<span class="status in-progress">进行中</span>`
+        : `<span class="status todo">未完成</span>`;
 
     const evidenceBtn = task.photos.length
-      ? `<button class="btn btn-secondary" data-action="show-evidence">📷 查看证据</button>`
+      ? `<button class="btn btn-secondary" data-action="show-evidence">📷 查看证据 (${task.photos.length})</button>`
       : "";
 
     tr.innerHTML = `
@@ -226,12 +224,22 @@ tableBody.addEventListener("click", async e => {
 
   if (action === "delete") {
     if (!confirm("确认删除该任务吗？")) return;
-    await fetch(`${API_BASE}/${id}`, {
-      method: "DELETE",
-      headers: { "x-api-key": API_KEY }
-    });
-    await refreshTable();
-    showToast("✅ 任务已删除");
+    try {
+      const res = await fetch(`${API_BASE}/${id}`, {
+        method: "DELETE",
+        headers: { "x-api-key": API_KEY }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(`❌ 删除失败：${err.error || res.status}`);
+        return;
+      }
+      await refreshTable();
+      showToast("✅ 任务已删除");
+    } catch (err) {
+      console.error("删除失败：", err);
+      showToast("⚠️ 网络错误，删除失败");
+    }
     return;
   }
 
@@ -254,26 +262,31 @@ async function addTask() {
     return;
   }
 
-  console.log("正在添加任务，请求地址：", API_BASE);
-  await fetch(API_BASE, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY
-    },
-    body: JSON.stringify({
-      no,
-      text,
-      status: "pending",
-      photos: []
-    })
-  });
+  try {
+    const res = await fetch(API_BASE, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": API_KEY
+      },
+      body: JSON.stringify({ no, text, status: "pending", photos: [] })
+    });
 
-  noInput.value = "";
-  taskInput.value = "";
-  noInput.focus();
-  await refreshTable();
-  showToast("✅ 任务已添加");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      hint.textContent = err.error || (err.errors && err.errors.join("; ")) || `添加失败 (${res.status})`;
+      return;
+    }
+
+    noInput.value = "";
+    taskInput.value = "";
+    noInput.focus();
+    await refreshTable();
+    showToast("✅ 任务已添加");
+  } catch (err) {
+    console.error("添加失败：", err);
+    hint.textContent = "网络错误，请检查后端是否运行";
+  }
 }
 
 $("addBtn").addEventListener("click", addTask);
@@ -284,28 +297,30 @@ taskInput.addEventListener("keydown", e => { if (e.key === "Enter") addTask(); }
    编辑浮层
    ========================= */
 function openEditModal(id) {
-  loadTasks().then(tasks => {
-    const task = tasks.find(t => t.id === id);
-    if (!task) return;
+  // 直接从缓存中查找，无需重新请求
+  const task = cachedTasks.find(t => t.id === id);
+  if (!task) {
+    showToast("⚠️ 任务数据未找到，请刷新页面");
+    return;
+  }
 
-    editingId = id;
-    editPhotos = [...task.photos];
+  editingId = id;
+  editPhotos = [...task.photos];
 
-    $("editNo").value = task.no;
-    $("editText").value = task.text;
-    $("editStatus").value = String(task.done);
-    $("editHint").textContent = "";
+  $("editNo").value = task.no;
+  $("editText").value = task.text;
+  $("editStatus").value = String(task.done);
+  $("editHint").textContent = "";
 
-    renderEditPreviews();
-    $("editModal").hidden = false;
-  });
+  renderEditPreviews();
+  $("editModal").hidden = false;
 }
 
 function renderEditPreviews() {
   const box = $("editPreviewList");
   box.innerHTML = editPhotos.map((src, i) => `
     <div class="preview-item">
-      <img src="${src}" />
+      <img src="${escapeHtml(src)}" alt="预览图 ${i + 1}" />
       <span class="remove" data-index="${i}">×</span>
     </div>
   `).join("");
@@ -322,23 +337,39 @@ $("saveEdit").addEventListener("click", async () => {
   const text = $("editText").value.trim();
   const done = $("editStatus").value === "true";
 
-  await fetch(`${API_BASE}/${editingId}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY
-    },
-    body: JSON.stringify({
-      no,
-      text,
-      status: done ? "fixed" : "pending",
-      photos: editPhotos
-    })
-  });
+  if (!no || !text) {
+    $("editHint").textContent = "编号和任务名称不能为空";
+    return;
+  }
 
-  closeEditModal();
-  await refreshTable();
-  showToast("✅ 任务已更新");
+  try {
+    const res = await fetch(`${API_BASE}/${editingId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": API_KEY
+      },
+      body: JSON.stringify({
+        no,
+        text,
+        status: done ? "completed" : "pending",
+        photos: editPhotos
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      $("editHint").textContent = err.error || (err.errors && err.errors.join("; ")) || `保存失败 (${res.status})`;
+      return;
+    }
+
+    closeEditModal();
+    await refreshTable();
+    showToast("✅ 任务已更新");
+  } catch (err) {
+    console.error("保存失败：", err);
+    $("editHint").textContent = "网络错误，保存失败";
+  }
 });
 
 $("cancelEdit").addEventListener("click", closeEditModal);
@@ -347,7 +378,7 @@ $("editModal").addEventListener("click", e => {
 });
 
 function closeEditModal() {
-  $("editModal").hidden = false;
+  $("editModal").hidden = true; // 🔴 修复：之前是 false，导致弹窗关不掉
   editingId = null;
   editPhotos = [];
 }
@@ -356,26 +387,27 @@ function closeEditModal() {
    证据展开
    ========================= */
 function toggleEvidence(row, id) {
-  loadTasks().then(tasks => {
-    const task = tasks.find(t => t.id === id);
-    const next = row.nextElementSibling;
-    if (!next) return;
-    const open = !next.hidden;
-    next.hidden = open;
-    if (!open) {
-      next.querySelector("td").innerHTML = `
-        <div class="evidence-grid">
-          ${task.photos.map(p => `<img src="${p}" />`).join("")}
-        </div>`;
-    }
-  });
+  const task = cachedTasks.find(t => t.id === id);
+  if (!task) return;
+
+  const next = row.nextElementSibling;
+  if (!next) return;
+
+  const open = !next.hidden;
+  next.hidden = open;
+
+  if (!open) {
+    next.querySelector("td").innerHTML = `
+      <div class="evidence-grid">
+        ${task.photos.map(p => `<img src="${escapeHtml(p)}" alt="证据" loading="lazy" />`).join("")}
+      </div>`;
+  }
 }
 
 /* =========================
-   工具（修复语法错误：删除 document. 后的多余空格）
+   工具函数
    ========================= */
 function escapeHtml(str) {
-  // 🔴 核心修复4：之前这里多了个空格，会导致JS语法错误，脚本直接崩
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
