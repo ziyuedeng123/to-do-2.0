@@ -28,18 +28,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ── 本地开发：静态文件服务 + SPA fallback ──
-// Vercel 上由 @vercel/static 接管，此处仅本地开发时生效
-const frontendPath = path.join(__dirname, '..', 'frontend');
-const isLocalDev = fs.existsSync(frontendPath);
+// Vercel 上由 public/ 约定自动服务静态文件，本地开发由 Express 接管
+// 优先使用 public/（Vercel 约定），其次回退到 frontend/
+const rootDir = path.join(__dirname, '..');
+const publicPath = path.join(rootDir, 'public');
+const frontendPath = path.join(rootDir, 'frontend');
+const staticDir = fs.existsSync(publicPath) ? publicPath : frontendPath;
+const isLocalDev = fs.existsSync(staticDir);
 
 if (isLocalDev) {
-    app.use(express.static(frontendPath));
+    app.use(express.static(staticDir));
 
     // SPA fallback：非 API 的 GET 请求返回 index.html
     app.use((req, res, next) => {
         if (req.path.startsWith('/api')) return next();
         if (req.method !== 'GET') return next();
-        res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
+        res.sendFile(path.join(staticDir, 'index.html'), (err) => {
             if (err) next(err);
         });
     });
@@ -64,7 +68,7 @@ if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`✅ Server is running on http://localhost:${PORT}`);
         if (isLocalDev) {
-            console.log(`🌐 Frontend:  http://localhost:${PORT}`);
+            console.log(`🌐 Frontend:  http://localhost:${PORT} (from ${path.basename(staticDir)})`);
         }
         console.log(`📡 API:       http://localhost:${PORT}/api/tasks`);
         console.log('🔑 API Key is configured.');
