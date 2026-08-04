@@ -1,0 +1,10 @@
+# Vercel 构建时排除这些文件
+backend/node_modules/
+backend/.env
+backend/data/tasks.json
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.md
+README*
