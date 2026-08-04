@@ -6,6 +6,7 @@ if (process.env.VERCEL !== '1') {
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const tasksRouter = require('./routes/tasks');
 
@@ -27,16 +28,18 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ── 本地开发：静态文件服务 + SPA fallback ──
-// Vercel 自动从项目根目录提供 index.html、style.css、script.js
-// 本地开发时由 Express 从根目录提供
+// Vercel 自动从 public/ 目录提供静态文件
+// 本地开发时由 Express 从 public/ 提供（fallback 到根目录）
 const rootDir = path.join(__dirname, '..');
-app.use(express.static(rootDir));
+const publicDir = path.join(rootDir, 'public');
+const staticDir = fs.existsSync(publicDir) ? publicDir : rootDir;
+app.use(express.static(staticDir));
 
 // SPA fallback：非 API 的 GET 请求返回 index.html
 app.use((req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     if (req.method !== 'GET') return next();
-    res.sendFile(path.join(rootDir, 'index.html'), (err) => {
+    res.sendFile(path.join(staticDir, 'index.html'), (err) => {
         if (err) next(err);
     });
 });
