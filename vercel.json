@@ -1,29 +1,20 @@
 {
-  "version": 2,
-  "builds": [
+  "outputDirectory": "frontend",
+  "rewrites": [
     {
-      "src": "backend/app.js",
-      "use": "@vercel/node"
+      "source": "/api/(.*)",
+      "destination": "/api/index"
     },
     {
-      "src": "frontend/**",
-      "use": "@vercel/static"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "backend/app.js"
-    },
-    {
-      "src": "/",
-      "dest": "frontend/index.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/$1"
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "backend/**"
     }
-  ],
+  },
   "env": {
     "API_KEY": "my-secret-key"
   }

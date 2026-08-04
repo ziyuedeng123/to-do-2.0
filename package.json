@@ -1,0 +1,15 @@
+{
+  "name": "todo-app",
+  "version": "2.0.0",
+  "private": true,
+  "description": "任务清单全栈应用 (Task Manager Full-Stack)",
+  "scripts": {
+    "dev": "cd backend && node app.js",
+    "start": "cd backend && node app.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}

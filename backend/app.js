@@ -1,5 +1,9 @@
 // backend/app.js
-require('dotenv').config();
+// ── 仅在本地开发时加载 .env（Vercel 通过 Dashboard 注入环境变量）──
+if (process.env.VERCEL !== '1') {
+    require('dotenv').config();
+}
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -9,10 +13,9 @@ const tasksRouter = require('./routes/tasks');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 启动前校验 API Key
+// 启动前校验 API Key（不 crash，让 auth 中间件来拒绝请求）
 if (!process.env.API_KEY) {
-    console.error('❌ FATAL: API_KEY is not set in environment variables.');
-    process.exit(1);
+    console.error('⚠️  WARNING: API_KEY is not set. All API requests will be rejected.');
 }
 
 // CORS 配置
